@@ -40,32 +40,42 @@ const PROJECT_ID = process.env.PROJECT_ID;
 
     console.log("BUILD completed successfully...");
 
-    const distFolderPath = path.join(__dirname, "output", "dist");
+    // Framework-agnostic path check (Vite uses 'dist', Next.js static export uses 'out', etc.)
+    let distFolderPath = path.join(__dirname, "output", "dist");
+    if (!fs.existsSync(distFolderPath)) {
+      const outPath = path.join(__dirname, "output", "out");
+      if (fs.existsSync(outPath)) distFolderPath = outPath;
+    }
 
-    // FIX 1: Use readdirSync to list files recursively
     const distFolderContent = fs.readdirSync(distFolderPath, {
       recursive: true,
     });
 
     for (const relativePath of distFolderContent) {
-      // FIX 2: Resolve absolute path for local file operations
       const absoluteFilePath = path.join(distFolderPath, relativePath);
 
       if (fs.lstatSync(absoluteFilePath).isDirectory()) continue;
       console.log(`Uploading: ${relativePath}`);
 
-      // FIX 3: Clean up S3 Key slashes for Windows compatibility
       const s3Key = `__outputs/${PROJECT_ID}/${relativePath}`.replace(
         /\\/g,
         "/",
       );
 
+      // FIX: Standardize lookups to handle modern compiled extensions (.mjs, .css, etc.)
+      const resolvedMime = mime.lookup(absoluteFilePath);
+      const contentType =
+        resolvedMime === "application/javascript" ||
+        absoluteFilePath.endsWith(".mjs")
+          ? "application/javascript"
+          : resolvedMime || "application/octet-stream";
+
       const command = new PutObjectCommand({
         Bucket: "ghoshkishanrana",
         Key: s3Key,
+        ACL: "public-read",
         Body: fs.createReadStream(absoluteFilePath),
-        ContentType:
-          mime.lookup(absoluteFilePath) || "application/octet-stream",
+        ContentType: contentType,
       });
 
       try {
