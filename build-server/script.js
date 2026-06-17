@@ -3,6 +3,9 @@ const path = require("path");
 const fs = require("fs");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const mime = require("mime-types");
+const Redis = require("ioredis");
+
+const publisher = new Redis();
 
 const s3Client = new S3Client({
   region: "ap-south-1",
@@ -14,14 +17,20 @@ const s3Client = new S3Client({
 
 const PROJECT_ID = process.env.PROJECT_ID;
 
+function publishLog(log) {
+  publisher.publish(`logs:${PROJECT_ID}`, JSON.stringify({ log }));
+}
+
 (async function init() {
   console.log("Executing script...");
+  publishLog("Build started...");
   const outDir = path.join(__dirname, "output");
 
   const p = exec(`cd ${outDir} && npm i && npm run build`);
 
   p.stdout.on("data", (data) => {
     console.log(data.toString());
+    publishLog(data.toString());
   });
 
   p.stderr.on("data", (data) => {
@@ -30,6 +39,7 @@ const PROJECT_ID = process.env.PROJECT_ID;
 
   p.on("error", (err) => {
     console.error("Process error:", err);
+    publishLog("ERROR: ", err.toString());
   });
 
   p.on("close", async (code) => {
@@ -37,7 +47,7 @@ const PROJECT_ID = process.env.PROJECT_ID;
       console.error(`Build failed with exit code ${code}`);
       return;
     }
-
+    publishLog("BUILD completed successfully...");
     console.log("BUILD completed successfully...");
 
     // Framework-agnostic path check (Vite uses 'dist', Next.js static export uses 'out', etc.)
