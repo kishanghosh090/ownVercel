@@ -5,7 +5,7 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const mime = require("mime-types");
 const Redis = require("ioredis");
 
-const publisher = new Redis();
+const publisher = new Redis("http://15.206.63.181:6379");
 
 const s3Client = new S3Client({
   region: "ap-south-1",
@@ -60,10 +60,10 @@ function publishLog(log) {
     const distFolderContent = fs.readdirSync(distFolderPath, {
       recursive: true,
     });
-
+    publishLog("starting to upload...");
     for (const relativePath of distFolderContent) {
       const absoluteFilePath = path.join(distFolderPath, relativePath);
-
+      publishLog("uploading file ", absoluteFilePath);
       if (fs.lstatSync(absoluteFilePath).isDirectory()) continue;
       console.log(`Uploading: ${relativePath}`);
 
@@ -76,7 +76,7 @@ function publishLog(log) {
       const resolvedMime = mime.lookup(absoluteFilePath);
       const contentType =
         resolvedMime === "application/javascript" ||
-        absoluteFilePath.endsWith(".mjs")
+          absoluteFilePath.endsWith(".mjs")
           ? "application/javascript"
           : resolvedMime || "application/octet-stream";
 
@@ -91,10 +91,12 @@ function publishLog(log) {
       try {
         await s3Client.send(command);
         console.log(`Uploaded: ${relativePath}`);
+        publishLog("uploaded: ", relativePath);
       } catch (uploadError) {
         console.error(`Failed to upload ${relativePath}:`, uploadError);
       }
     }
+    publishLog("All uploads completed.");
 
     console.log("All uploads completed.");
   });

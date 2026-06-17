@@ -2,9 +2,29 @@ import "dotenv/config";
 import express from "express";
 import { generateSlug } from "random-word-slugs";
 import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs";
+import { Server } from "socket.io"
+import Redis from "ioredis";
+const subscriber = new Redis("http://15.206.63.181:6379");
+
 
 const app = express();
 const PORT = process.env.PORT ?? 9000;
+const io = new Server({
+  cors: {
+    origin: "*",
+  },
+});
+
+io.on("connection", (socket) => {
+  socket.on("subscribe", (channle) => {
+    socket.join(channle);
+    socket.emit("message", `Subscribed to ${channle}`);
+  })
+})
+io.listen(9001, () => {
+  console.log("Socket.IO server is listening on port 9001");
+});
+
 const ecsClient = new ECSClient({
   region: "ap-south-1",
   credentials: {
@@ -67,6 +87,17 @@ app.post("/project", async (req, res) => {
   });
 });
 
+
+async function initRedisSubscribe() {
+  console.log('subscribe to logs');
+
+  subscriber.psubscribe(`logs:*`,)
+  subscriber.on("pmessage", (pattern, channel, message) => {
+    // const projectId = channel.split(":")[1];
+    io.to(channel).emit("message", message);
+  })
+}
+initRedisSubscribe()
 app.listen(PORT, () => {
   console.log(`Api Server is listening at PORT ${PORT}`);
 });
