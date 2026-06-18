@@ -5,7 +5,11 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const mime = require("mime-types");
 const Redis = require("ioredis");
 
-const publisher = new Redis("http://15.206.63.181:6379");
+const publisher = new Redis({
+  host: "15.206.63.181",
+  port: 6379,
+});
+
 
 const s3Client = new S3Client({
   region: "ap-south-1",

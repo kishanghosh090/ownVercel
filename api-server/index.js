@@ -4,7 +4,10 @@ import { generateSlug } from "random-word-slugs";
 import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs";
 import { Server } from "socket.io"
 import Redis from "ioredis";
-const subscriber = new Redis("http://15.206.63.181:6379");
+const subscriber = new Redis({
+  host: "15.206.63.181",
+  port: 6379,
+});
 
 
 const app = express();
