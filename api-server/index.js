@@ -78,6 +78,10 @@ app.post("/deploy", async (req, res) => {
 
   // Create project in DB
   const project = await prisma.project.findUnique({ where: { id: projectId } })
+  if (!project) {
+    return res.json({ err: "project not found" })
+  }
+
 
   // Create deployment record
   const deployment = await prisma.deployment.create({
@@ -110,13 +114,14 @@ app.post("/deploy", async (req, res) => {
         {
           name: "builder-image",
           environment: [
-            { name: "GIT_REPOSITORY_URL", value: githubUrl },
+            { name: "GIT_REPOSITORY_URL", value: project.gitUrl },
             { name: "AWS_ACCESS_KEY_ID", value: "" },
             {
               name: "AWS_SECRET_ACCESS_KEY",
               value: "",
             },
             { name: "PROJECT_ID", value: project.id },
+            { name: "DEPLOYMENT_ID", value: deployment.id },
           ],
         },
       ],
