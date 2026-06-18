@@ -4,8 +4,12 @@ import { generateSlug } from "random-word-slugs";
 import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs";
 import { Server } from "socket.io"
 import Redis from "ioredis";
+import { z } from "zod"
+import { prisma } from "./lib/db.js";
+
+
 const subscriber = new Redis({
-  host: "15.206.63.181",
+  host: "13.203.91.106",
   port: 6379,
 });
 
@@ -45,8 +49,43 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.post("/project", async (req, res) => {
-  const { githubUrl } = req.body;
-  const projectSlug = generateSlug();
+  const schema = z.object({
+    name: z.string(),
+    githubUrl: z.string()
+  })
+  const safeParseResult = schema.safeParse(req.body)
+
+  if (safeParseResult.error) {
+    return res.status(400).json({ error: safeParseResult.error.flatten() });
+  }
+  const { name, githubUrl } = safeParseResult.data
+  const subdomain = generateSlug();
+
+  const project = await prisma.project.create({
+    data: {
+      name,
+      gitUrl: githubUrl,
+      subdomain
+    }
+  })
+
+  return res.json({ status: "success", data: project });
+
+})
+
+app.post("/deploy", async (req, res) => {
+  const { projectId } = req.body;
+
+  // Create project in DB
+  const project = await prisma.project.findUnique({ where: { id: projectId } })
+
+  // Create deployment record
+  const deployment = await prisma.deployment.create({
+    data: {
+      projectId: project.id,
+      status: "PENDING",
+    }
+  });
 
   // spin the container
 
@@ -77,7 +116,7 @@ app.post("/project", async (req, res) => {
               name: "AWS_SECRET_ACCESS_KEY",
               value: "",
             },
-            { name: "PROJECT_ID", value: projectSlug },
+            { name: "PROJECT_ID", value: project.id },
           ],
         },
       ],
