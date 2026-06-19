@@ -7,7 +7,7 @@ import { Github } from "lucide-react";
 import { Fira_Code } from "next/font/google";
 import axios from "axios";
 
-const socket = io("http://localhost:9002");
+const socket = io("http://localhost:9001");
 
 const firaCode = Fira_Code({ subsets: ["latin"] });
 
@@ -28,7 +28,7 @@ export default function Home() {
   const isValidURL: [boolean, string | null] = useMemo(() => {
     if (!repoURL || repoURL.trim() === "") return [false, null];
     const regex = new RegExp(
-      /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)(?:\/)?$/
+      /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)(?:\/)?$/,
     );
     return [regex.test(repoURL), "Enter valid Github Repository URL"];
   }, [repoURL]);
