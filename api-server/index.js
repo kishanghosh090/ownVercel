@@ -3,15 +3,10 @@ import express from "express";
 import { generateSlug } from "random-word-slugs";
 import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs";
 import { Server } from "socket.io"
-import Redis from "ioredis";
 import { z } from "zod"
 import { prisma } from "./lib/db.js";
+import { createClient } from "@clickhouse/client"
 
-
-const subscriber = new Redis({
-  host: "15.207.1.102",
-  port: 6379,
-});
 
 
 const app = express();
@@ -21,6 +16,16 @@ const io = new Server({
     origin: "*",
   },
 });
+
+import { createClient } from '@clickhouse/client'
+
+const client = createClient({
+  url: "http://15.207.1.102:8123",
+  username: "default",
+  password: "",
+  database: "default"
+})
+
 
 io.on("connection", (socket) => {
   socket.on("subscribe", (channle) => {

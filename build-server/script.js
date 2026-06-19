@@ -12,6 +12,7 @@ const kafka = new Kafka({
   clientId: `docker-build-server-${DEPLOYMENT_ID}`,
   brokers: ["15.207.1.102:9092"]
 })
+const producer = kafka.producer()
 
 const s3Client = new S3Client({
   region: "ap-south-1",
@@ -21,29 +22,38 @@ const s3Client = new S3Client({
   },
 });
 
-function publishLog(log) {
-  publisher.publish(`logs:${PROJECT_ID}`, JSON.stringify({ log }));
+async function publishLog(log) {
+  await producer.send({
+    topic: `container-logs`, messages: [{
+      key: "log", value: JSON.stringify({
+        PROJECT_ID,
+        DEPLOYMENT_ID,
+        log
+      })
+    }]
+  })
 }
 
 (async function init() {
+  await producer.connect()
   console.log("Executing script...");
   publishLog("Build started...");
   const outDir = path.join(__dirname, "output");
 
   const p = exec(`cd ${outDir} && npm i && npm run build`);
 
-  p.stdout.on("data", (data) => {
+  p.stdout.on("data", async (data) => {
     console.log(data.toString());
-    publishLog(data.toString());
+    await publishLog(data.toString());
   });
 
   p.stderr.on("data", (data) => {
     console.error("Build Log/Error:", data.toString());
   });
 
-  p.on("error", (err) => {
+  p.on("error", async (err) => {
     console.error("Process error:", err);
-    publishLog("ERROR: ", err.toString());
+    await publishLog("ERROR: ", err.toString());
   });
 
   p.on("close", async (code) => {
@@ -51,7 +61,7 @@ function publishLog(log) {
       console.error(`Build failed with exit code ${code}`);
       return;
     }
-    publishLog("BUILD completed successfully...");
+    await publishLog("BUILD completed successfully...");
     console.log("BUILD completed successfully...");
 
     // Framework-agnostic path check (Vite uses 'dist', Next.js static export uses 'out', etc.)
@@ -64,10 +74,10 @@ function publishLog(log) {
     const distFolderContent = fs.readdirSync(distFolderPath, {
       recursive: true,
     });
-    publishLog("starting to upload...");
+    await publishLog("starting to upload...");
     for (const relativePath of distFolderContent) {
       const absoluteFilePath = path.join(distFolderPath, relativePath);
-      publishLog("uploading file ", absoluteFilePath);
+      await publishLog("uploading file ", absoluteFilePath);
       if (fs.lstatSync(absoluteFilePath).isDirectory()) continue;
       console.log(`Uploading: ${relativePath}`);
 
@@ -95,12 +105,12 @@ function publishLog(log) {
       try {
         await s3Client.send(command);
         console.log(`Uploaded: ${relativePath}`);
-        publishLog("uploaded: ", relativePath);
+        await publishLog("uploaded: ", relativePath);
       } catch (uploadError) {
         console.error(`Failed to upload ${relativePath}:`, uploadError);
       }
     }
-    publishLog("All uploads completed.");
+    await publishLog("All uploads completed.");
 
     console.log("All uploads completed.");
     process.exit(0)
