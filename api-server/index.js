@@ -158,7 +158,7 @@ async function initKafkaConsumer() {
     {
       autoCommit: false,
       eachBatch: async function ({ batch, heartbeat, resolveOffset, commitOffsetsIfNecessary }) {
-        const messages = batch.messages()
+        const messages = batch.messages
         console.log(`Received ${messages.length} messages`);
 
         for (const message of messages) {
