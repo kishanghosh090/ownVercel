@@ -1,3 +1,5 @@
+import { v4 as uuid } from "uuid"
+
 import "dotenv/config";
 import express from "express";
 import { generateSlug } from "random-word-slugs";
@@ -6,18 +8,26 @@ import { Server } from "socket.io"
 import { z } from "zod"
 import { prisma } from "./lib/db.js";
 import { createClient } from "@clickhouse/client"
+import { Kafka } from "kafkajs"
+import cors from "cors"
 
+const kafka = new Kafka({
+  clientId: `api-server`,
+  brokers: ["15.207.1.102:9092"],
+  logLevel: 'NOTHING'
 
+})
 
 const app = express();
 const PORT = process.env.PORT ?? 9000;
+
+
 const io = new Server({
   cors: {
     origin: "*",
   },
 });
 
-import { createClient } from '@clickhouse/client'
 
 const client = createClient({
   url: "http://15.207.1.102:8123",
@@ -26,11 +36,12 @@ const client = createClient({
   database: "default"
 })
 
+const consumer = kafka.consumer({ groupId: "api-server-logs-consumer" })
 
 io.on("connection", (socket) => {
-  socket.on("subscribe", (channle) => {
-    socket.join(channle);
-    socket.emit("message", `Subscribed to ${channle}`);
+  socket.on("subscribe", (channel) => {
+    socket.join(channel);
+    socket.emit("message", `Subscribed to ${channel}`);
   })
 })
 io.listen(9001, () => {
@@ -49,7 +60,7 @@ const config = {
   CLUSTER: "arn:aws:ecs:ap-south-1:217797467578:cluster/builder-cluster",
   TASK: "arn:aws:ecs:ap-south-1:217797467578:task-definition/builder-task",
 };
-
+app.use(cors())
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -120,10 +131,10 @@ app.post("/deploy", async (req, res) => {
           name: "builder-image",
           environment: [
             { name: "GIT_REPOSITORY_URL", value: project.gitUrl },
-            { name: "AWS_ACCESS_KEY_ID", value: "" },
+            { name: "AWS_ACCESS_KEY_ID", value: process.env.AWS_ACCESS_KEY_ID },
             {
               name: "AWS_SECRET_ACCESS_KEY",
-              value: "",
+              value: process.env.AWS_SECRET_ACCESS_KEY,
             },
             { name: "PROJECT_ID", value: project.id },
             { name: "DEPLOYMENT_ID", value: deployment.id },
@@ -135,21 +146,48 @@ app.post("/deploy", async (req, res) => {
   await ecsClient.send(command);
   return res.json({
     status: "queued",
-    data: { projectSlug, url: `http://${projectSlug}.local:8000` },
+    data: { deploymentId: deployment.id },
   });
 });
 
 
-async function initRedisSubscribe() {
-  console.log('subscribe to logs');
+async function initKafkaConsumer() {
+  await consumer.connect()
+  await consumer.subscribe({ topics: ["container-logs"] })
+  await consumer.run(
+    {
+      autoCommit: false,
+      eachBatch: async function ({ batch, heartbeat, resolveOffset, commitOffsetsIfNecessary }) {
+        const messages = batch.messages()
+        console.log(`Received ${messages.length} messages`);
 
-  subscriber.psubscribe(`logs:*`,)
-  subscriber.on("pmessage", (pattern, channel, message) => {
-    // const projectId = channel.split(":")[1];
-    io.to(channel).emit("message", message);
-  })
+        for (const message of messages) {
+          const stringMessage = message.value.toString()
+          const { PROJECT_ID, DEPLOYMENT_ID, log } = JSON.parse(stringMessage)
+
+          const { query_id } = await client.insert({
+            table: "log_events",
+            values: [
+              {
+                event_id: uuid(),
+                deployment_id: DEPLOYMENT_ID,
+                log: log,
+              }
+            ],
+            format: "JSONEachRow"
+          })
+          console.log("inserted ", query_id);
+
+          commitOffsetsIfNecessary()
+          resolveOffset(message.offset)
+          await heartbeat()
+
+        }
+
+      }
+    })
 }
-initRedisSubscribe()
+initKafkaConsumer()
 app.listen(PORT, () => {
   console.log(`Api Server is listening at PORT ${PORT}`);
 });
