@@ -12,7 +12,10 @@ app.use((req, res) => {
 
   const subDomain = hostName.split(".")[0];
 
-  const resolveTo = `${BASE_URL}/${subDomain}`;
+  /// get id from project using subdomain and pass wot resolveTo 
+  const projectId = ""
+
+  const resolveTo = `${BASE_URL}/${projectId}`;
   console.log(resolveTo);
 
   proxy.web(req, res, { target: resolveTo, changeOrigin: true }, (err) => {
