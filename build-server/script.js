@@ -3,13 +3,15 @@ const path = require("path");
 const fs = require("fs");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const mime = require("mime-types");
-const Redis = require("ioredis");
+const { Kafka } = require("kafkajs")
 
-const publisher = new Redis({
-  host: "15.206.63.181",
-  port: 6379,
-});
+const PROJECT_ID = process.env.PROJECT_ID;
+const DEPLOYMENT_ID = process.env.DEPLOYMENT_ID
 
+const kafka = new Kafka({
+  clientId: `docker-build-server-${DEPLOYMENT_ID}`,
+  brokers: ["15.207.1.102:9092"]
+})
 
 const s3Client = new S3Client({
   region: "ap-south-1",
@@ -18,8 +20,6 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
-
-const PROJECT_ID = process.env.PROJECT_ID;
 
 function publishLog(log) {
   publisher.publish(`logs:${PROJECT_ID}`, JSON.stringify({ log }));
@@ -103,5 +103,6 @@ function publishLog(log) {
     publishLog("All uploads completed.");
 
     console.log("All uploads completed.");
+    process.exit(0)
   });
 })();

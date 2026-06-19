@@ -9,7 +9,7 @@ import { prisma } from "./lib/db.js";
 
 
 const subscriber = new Redis({
-  host: "13.203.91.106",
+  host: "15.207.1.102",
   port: 6379,
 });
 
